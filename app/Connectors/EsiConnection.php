@@ -166,32 +166,45 @@ class EsiConnection
             return [];
         }
 
-        // Get corporation names and alliance information
-        foreach ($data as $idx => $d) {
-            $corp_info = $this->eseye->invoke('get', '/corporations/{corporation_id}/', [
-                'corporation_id' => $d->corporation_id,
-            ]);
-            $d->corporation_name = $corp_info->name;
-
-            $history = [];
-            $alliance_history = $this->eseye->invoke('get', '/corporations/{corporation_id}/alliancehistory/', [
-                'corporation_id' => $d->corporation_id,
-            ]);
-            foreach ($alliance_history as $h) {
-                $history[] = $h;
+        // Collect unique corporation IDs to avoid duplicate ESI calls
+        $unique_corp_ids = [];
+        foreach ($data as $d) {
+            if (!in_array($d->corporation_id, $unique_corp_ids)) {
+                $unique_corp_ids[] = $d->corporation_id;
             }
+        }
 
-            usort($history, function ($a, $b) {
+        // Fetch corp info and alliance history once per unique corporation
+        $corp_infos = [];
+        $alliance_histories = [];
+        foreach ($unique_corp_ids as $corp_id) {
+            $corp_infos[$corp_id] = $this->eseye->invoke('get', '/corporations/{corporation_id}/', [
+                'corporation_id' => $corp_id,
+            ]);
+
+            $raw_history = $this->eseye->invoke('get', '/corporations/{corporation_id}/alliancehistory/', [
+                'corporation_id' => $corp_id,
+            ]);
+            $sorted = [];
+            foreach ($raw_history as $h) {
+                $sorted[] = $h;
+            }
+            usort($sorted, function ($a, $b) {
                 $a = new \DateTime($a->start_date);
                 $b = new \DateTime($b->start_date);
-
                 return ($a < $b) ? 1 : -1;
             });
+            $alliance_histories[$corp_id] = $sorted;
+        }
+
+        // Map fetched data back to each history entry
+        foreach ($data as $idx => $d) {
+            $d->corporation_name = $corp_infos[$d->corporation_id]->name;
 
             $alliance_id = null;
             $charStart = new \DateTime($d->start_date);
 
-            foreach ($history as $h) {
+            foreach ($alliance_histories[$d->corporation_id] as $h) {
                 $alliStart = new \DateTime($h->start_date);
                 if ($charStart > $alliStart) {
                     $alliance_id = property_exists($h, 'alliance_id') ? $h->alliance_id : null;
