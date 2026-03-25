@@ -614,6 +614,28 @@ class EsiConnection
     }
 
     /**
+     * Fetch raw skills response from ESI, cached to avoid duplicate calls.
+     * Returns the full WithHttpInfo response array, or null on failure.
+     *
+     * @throws ApiException
+     */
+    private function getRawSkills(): ?array
+    {
+        $cache_key = "raw_skills_$this->char_id";
+
+        if (Cache::has($cache_key)) {
+            return Cache::get($cache_key);
+        }
+
+        $model = new SkillsApi($this->client, $this->config);
+        $skills = $model->getCharactersCharacterIdSkillsWithHttpInfo($this->char_id);
+
+        Cache::add($cache_key, $skills, $this->getCacheExpirationTime($skills));
+
+        return $skills;
+    }
+
+    /**
      * Get an associative array of a character's skills, indexed by name
      *
      * @throws ApiException
@@ -626,8 +648,10 @@ class EsiConnection
             return Cache::get($cache_key);
         }
 
-        $model = new SkillsApi($this->client, $this->config);
-        $skills = $model->getCharactersCharacterIdSkillsWithHttpInfo($this->char_id);
+        $skills = $this->getRawSkills();
+        if ($skills === null) {
+            return [];
+        }
         $unprocessed_skills = $skills[0]->getSkills();
         $out = [];
 
@@ -672,8 +696,10 @@ class EsiConnection
             return Cache::get($cache_key);
         }
 
-        $model = new SkillsApi($this->client, $this->config);
-        $skills = $model->getCharactersCharacterIdSkillsWithHttpInfo($this->char_id);
+        $skills = $this->getRawSkills();
+        if ($skills === null) {
+            return [];
+        }
         $unprocessed_skills = $skills[0]->getSkills();
         $out = [];
 
@@ -1294,10 +1320,13 @@ class EsiConnection
             return Cache::get($cache_key);
         }
 
-        $model = new SkillsApi($this->client, $this->config);
         try {
-            $sp = $model->getCharactersCharacterIdSkillsWithHttpInfo($this->char_id);
+            $sp = $this->getRawSkills();
         } catch (ApiException) {
+            return null;
+        }
+
+        if ($sp === null) {
             return null;
         }
 
