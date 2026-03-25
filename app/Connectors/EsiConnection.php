@@ -1595,6 +1595,41 @@ class EsiConnection
     }
 
     /**
+     * Get alliance info from ESI, with caching to avoid duplicate fetches
+     *
+     * @throws EsiScopeAccessDeniedException
+     * @throws InvalidAuthenticationException
+     * @throws InvalidContainerDataException
+     * @throws RequestFailedException
+     * @throws UriDataMissingException
+     */
+    private function getAllianceInfo($alliance_id): ?object
+    {
+        if ($alliance_id == null) {
+            return null;
+        }
+
+        $cache_key = "alliance_info_$alliance_id";
+
+        if (Cache::has($cache_key)) {
+            return Cache::get($cache_key);
+        }
+
+        $alliance_info = $this->eseye->invoke('get', '/alliances/{alliance_id}/', [
+            'alliance_id' => $alliance_id,
+        ]);
+
+        $result = (object) [
+            'name' => (string) $alliance_info->name,
+            'ticker' => (string) $alliance_info->ticker,
+        ];
+
+        Cache::add($cache_key, $result, env('CACHE_TIME', 3264));
+
+        return $result;
+    }
+
+    /**
      * Get the name of an alliance
      *
      * @throws EsiScopeAccessDeniedException
@@ -1605,24 +1640,7 @@ class EsiConnection
      */
     public function getAllianceName($alliance_id): ?string
     {
-        if ($alliance_id == null) {
-            return null;
-        }
-
-        $cache_key = "alliance_$alliance_id";
-
-        if (Cache::has($cache_key)) {
-            return Cache::get($cache_key);
-        }
-
-        $alliance_info = $this->eseye->invoke('get', '/alliances/{alliance_id}/', [
-            'alliance_id' => $alliance_id,
-        ]);
-        $allianceName = (string) $alliance_info->name;
-
-        Cache::add($cache_key, $allianceName, env('CACHE_TIME', 3264));
-
-        return $allianceName;
+        return $this->getAllianceInfo($alliance_id)?->name;
     }
 
     /**
@@ -1636,24 +1654,7 @@ class EsiConnection
      */
     public function getAllianceTicker($alliance_id): ?string
     {
-        if ($alliance_id == null) {
-            return null;
-        }
-
-        $cache_key = "alliance_ticker_$alliance_id";
-
-        if (Cache::has($cache_key)) {
-            return Cache::get($cache_key);
-        }
-
-        $alliance_info = $this->eseye->invoke('get', '/alliances/{alliance_id}/', [
-            'alliance_id' => $alliance_id,
-        ]);
-        $allianceTicker = (string) $alliance_info->ticker;
-
-        Cache::add($cache_key, $allianceTicker, env('CACHE_TIME', 3264));
-
-        return $allianceTicker;
+        return $this->getAllianceInfo($alliance_id)?->ticker;
     }
 
     /**
